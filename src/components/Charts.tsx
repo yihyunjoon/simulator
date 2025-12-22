@@ -1,4 +1,4 @@
-import { createEffect, For, onMount } from 'solid-js'
+import { createEffect, For, onMount, onCleanup } from 'solid-js'
 import * as d3 from 'd3'
 import type { HistoryPoint } from '../types'
 
@@ -22,6 +22,9 @@ function formatYear(year: number): string {
 
 function Chart(props: { config: ChartConfig; history: HistoryPoint[] }) {
   let svgRef: SVGSVGElement | undefined
+  let rafId: number | undefined
+  let lastDrawTime = 0
+  const THROTTLE_MS = 100 // Only redraw every 100ms
 
   const drawChart = () => {
     if (!svgRef || props.history.length < 2) return
@@ -122,14 +125,33 @@ function Chart(props: { config: ChartConfig; history: HistoryPoint[] }) {
     }
   }
 
+  const throttledDraw = () => {
+    const now = performance.now()
+    if (now - lastDrawTime < THROTTLE_MS) {
+      // Schedule for later if not enough time has passed
+      if (rafId) cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(() => {
+        lastDrawTime = performance.now()
+        drawChart()
+      })
+      return
+    }
+    lastDrawTime = now
+    drawChart()
+  }
+
   onMount(() => {
     drawChart()
+  })
+
+  onCleanup(() => {
+    if (rafId) cancelAnimationFrame(rafId)
   })
 
   createEffect(() => {
     // Track history changes
     props.history.length
-    drawChart()
+    throttledDraw()
   })
 
   const currentValue = () => {
@@ -158,8 +180,8 @@ export default function Charts(props: ChartsProps) {
   ]
 
   return (
-    <div class="bg-gradient-to-b from-amber-100 to-amber-50 border-4 border-amber-900/40 overflow-hidden">
-      <div class="bg-gradient-to-r from-amber-900 to-amber-800 px-4 py-2 border-b-2 border-amber-950">
+    <div class="bg-linear-to-b from-amber-100 to-amber-50 border-4 border-amber-900/40 overflow-hidden">
+      <div class="bg-linear-to-r from-amber-900 to-amber-800 px-4 py-2 border-b-2 border-amber-950">
         <h2 class="text-amber-100 font-serif tracking-widest text-sm uppercase">
           Statistics
         </h2>

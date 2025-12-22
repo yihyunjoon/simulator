@@ -6,6 +6,7 @@ import PopulationPyramid from './components/PopulationPyramid'
 import ChronicleLog from './components/ChronicleLog'
 import MainStats from './components/MainStats'
 import GameOverModal from './components/GameOverModal'
+import PopulationTable from './components/PopulationTable'
 
 function App() {
   const { state, isRunning, speed, togglePlayPause, changeSpeed, reset } = createGameStore()
@@ -22,8 +23,8 @@ function App() {
       <div class="max-w-6xl mx-auto">
         {/* Header - Royal Banner Style */}
         <div class="relative text-center mb-8">
-          <div class="absolute inset-x-0 top-1/2 h-px bg-gradient-to-r from-transparent via-amber-600/50 to-transparent" />
-          <div class="relative inline-block bg-gradient-to-b from-amber-900/90 to-amber-950/90 px-12 py-4 border-2 border-amber-600/60">
+          <div class="absolute inset-x-0 top-1/2 h-px bg-linear-to-r from-transparent via-amber-600/50 to-transparent" />
+          <div class="relative inline-block bg-linear-to-b from-amber-900/90 to-amber-950/90 px-12 py-4 border-2 border-amber-600/60">
             <div class="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-amber-500" />
             <div class="absolute -top-1 -right-1 w-3 h-3 border-t-2 border-r-2 border-amber-500" />
             <div class="absolute -bottom-1 -left-1 w-3 h-3 border-b-2 border-l-2 border-amber-500" />
@@ -65,6 +66,11 @@ function App() {
         {/* Chronicle Log */}
         <div class="mb-6">
           <ChronicleLog logs={state.logs} />
+        </div>
+
+        {/* Population Table */}
+        <div class="mb-6">
+          <PopulationTable humans={state.humans} currentYear={state.year} />
         </div>
 
         {/* Game Over Modal */}

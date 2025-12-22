@@ -6,7 +6,7 @@ interface GameOverModalProps {
 export default function GameOverModal(props: GameOverModalProps) {
   return (
     <div class="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <div class="bg-gradient-to-b from-amber-100 to-amber-200 border-8 border-double border-amber-900 p-8 text-center max-w-md relative">
+      <div class="bg-linear-to-b from-amber-100 to-amber-200 border-8 border-double border-amber-900 p-8 text-center max-w-md relative">
         <div class="absolute top-2 left-2 text-2xl text-amber-800/30">+</div>
         <div class="absolute top-2 right-2 text-2xl text-amber-800/30">+</div>
         <div class="absolute bottom-2 left-2 text-2xl text-amber-800/30">+</div>
@@ -29,7 +29,7 @@ export default function GameOverModal(props: GameOverModalProps) {
 
         <button
           onClick={props.onReset}
-          class="px-8 py-3 bg-gradient-to-b from-emerald-800 to-emerald-950 border-2 border-emerald-600 text-emerald-100 font-serif text-lg tracking-wide hover:from-emerald-700 hover:to-emerald-900 transition-all"
+          class="px-8 py-3 bg-linear-to-b from-emerald-800 to-emerald-950 border-2 border-emerald-600 text-emerald-100 font-serif text-lg tracking-wide hover:from-emerald-700 hover:to-emerald-900 transition-all"
         >
           Begin Anew
         </button>

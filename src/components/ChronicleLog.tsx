@@ -6,8 +6,8 @@ interface ChronicleLogProps {
 
 export default function ChronicleLog(props: ChronicleLogProps) {
   return (
-    <div class="bg-gradient-to-b from-amber-100 to-amber-50 border-4 border-amber-900/40 overflow-hidden">
-      <div class="bg-gradient-to-r from-amber-900 to-amber-800 px-4 py-2 border-b-2 border-amber-950">
+    <div class="bg-linear-to-b from-amber-100 to-amber-50 border-4 border-amber-900/40 overflow-hidden">
+      <div class="bg-linear-to-r from-amber-900 to-amber-800 px-4 py-2 border-b-2 border-amber-950">
         <h2 class="text-amber-100 font-serif tracking-widest text-sm uppercase">
           The Royal Chronicle
         </h2>

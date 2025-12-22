@@ -22,8 +22,8 @@ export default function MainStats(props: MainStatsProps) {
   })
 
   return (
-    <div class="bg-gradient-to-b from-amber-100 to-amber-50 rounded border-4 border-amber-900/40 shadow-2xl overflow-hidden">
-      <div class="bg-gradient-to-r from-amber-900/20 via-transparent to-amber-900/20 p-1">
+    <div class="bg-linear-to-b from-amber-100 to-amber-50 rounded border-4 border-amber-900/40 shadow-2xl overflow-hidden">
+      <div class="bg-linear-to-r from-amber-900/20 via-transparent to-amber-900/20 p-1">
         <div class="grid grid-cols-2 md:grid-cols-4 divide-x divide-amber-900/20">
           <div class="p-4 text-center">
             <div class="text-xs text-amber-800/60 uppercase tracking-widest font-serif mb-1">Annus</div>

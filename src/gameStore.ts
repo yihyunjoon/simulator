@@ -20,8 +20,12 @@ const femaleNames = [
   "Freya", "Ingrid", "Astrid", "Sigrid", "Helga", "Gudrun", "Thyra", "Ragnhild", "Solveig", "Eira",
 ];
 
-const DEATH_AGE_MEAN = 60;
-const DEATH_AGE_STD = 10;
+// Gompertz mortality model parameters
+// μ(age) = a * exp(b * (age - c))
+// Tuned for ~60 year average lifespan in pre-modern conditions
+const GOMPERTZ_A = 0.003;  // baseline mortality rate
+const GOMPERTZ_B = 0.08;   // mortality acceleration
+const GOMPERTZ_C = 15;     // age offset
 
 function getRandomName(gender: Gender, usedNames: Set<string>): string {
   const names = gender === "male" ? maleNames : femaleNames;
@@ -40,10 +44,13 @@ function getRandomName(gender: Gender, usedNames: Set<string>): string {
 }
 
 function deathProbability(age: number): number {
-  if (age < 40) return 0.001;
-  const z = (age - DEATH_AGE_MEAN) / DEATH_AGE_STD;
-  const prob = Math.exp(-0.5 * z * z) / (DEATH_AGE_STD * Math.sqrt(2 * Math.PI));
-  return Math.min(0.95, prob * 15 + (age > 80 ? 0.5 : 0));
+  // Infant/child mortality (higher in pre-modern era)
+  if (age < 5) return 0.05;   // 5% per year for infants
+  if (age < 15) return 0.01;  // 1% per year for children
+
+  // Gompertz model for adults: exponentially increasing mortality
+  const prob = GOMPERTZ_A * Math.exp(GOMPERTZ_B * (age - GOMPERTZ_C));
+  return Math.min(0.95, prob);
 }
 
 function createInitialHumans(): Human[] {
@@ -126,6 +133,8 @@ export function createGameStore() {
   const [speed, setSpeed] = createSignal(1);
 
   let intervalId: number | undefined;
+  let tickCount = 0;
+  const SAVE_INTERVAL = 10; // Save every 10 ticks instead of every tick
   const usedNames = new Set<string>(state.humans.map(h => h.name));
 
   function formatYear(year: number): string {
@@ -159,62 +168,82 @@ export function createGameStore() {
       return;
     }
 
-    // 1. Food production (workers: age 15-49)
-    const workers = state.humans.filter((h) => h.age >= 15 && h.age < 50);
-    const produced = workers.length * 10;
-    if (produced > 0) {
-      setState("food", (f) => f + produced);
-    }
+    // Single-pass categorization for O(n) instead of O(n) × 8
+    let workerCount = 0;
+    const unmarriedWomen: Human[] = [];
+    const unmarriedMen: Human[] = [];
+    const fertileMarriedWomen: Human[] = [];
+    const deceasedIds = new Set<number>();
+    const humanById = new Map<number, Human>();
 
-    // 2. Marriage (unmarried adults find partners)
-    const unmarriedWomen = state.humans.filter(
-      (h) => h.gender === "female" && h.age >= 15 && !h.spouseId
-    );
-    const unmarriedMen = state.humans.filter(
-      (h) => h.gender === "male" && h.age >= 15 && !h.spouseId
-    );
+    for (const human of state.humans) {
+      humanById.set(human.id, human);
 
-    const newlyMarried: { bride: Human; groom: Human }[] = [];
+      // Workers (15-49)
+      if (human.age >= 15 && human.age < 50) {
+        workerCount++;
+      }
 
-    for (const woman of unmarriedWomen) {
-      const eligibleMen = unmarriedMen.filter(
-        (m) =>
-          !newlyMarried.some((nm) => nm.groom.id === m.id) &&
-          !areSiblings(woman, m) &&
-          !areDirectlyRelated(woman, m)
-      );
+      // Unmarried adults for marriage
+      if (human.age >= 15 && !human.spouseId) {
+        if (human.gender === "female") {
+          unmarriedWomen.push(human);
+        } else {
+          unmarriedMen.push(human);
+        }
+      }
 
-      if (eligibleMen.length > 0 && Math.random() < 0.5) {
-        const groom = eligibleMen[Math.floor(Math.random() * eligibleMen.length)];
-        newlyMarried.push({ bride: woman, groom });
+      // Fertile married women (15-30)
+      if (
+        human.gender === "female" &&
+        human.age >= 15 &&
+        human.age <= 30 &&
+        human.spouseId !== undefined
+      ) {
+        fertileMarriedWomen.push(human);
+      }
+
+      // Death check (do it in same pass)
+      const prob = deathProbability(human.age);
+      if (Math.random() < prob) {
+        deceasedIds.add(human.id);
       }
     }
 
-    for (const { bride, groom } of newlyMarried) {
-      setState("humans", (h) => h.id === bride.id, "spouseId", groom.id);
-      setState("humans", (h) => h.id === groom.id, "spouseId", bride.id);
+    // 1. Food production
+    if (workerCount > 0) {
+      setState("food", (f) => f + workerCount * 10);
     }
 
-    if (newlyMarried.length > 0) {
-      addLog(`Married: ${newlyMarried.length} couples`);
+    // 2. Marriage (optimized with Set for O(1) lookup)
+    const newlyMarried: { brideId: number; groomId: number }[] = [];
+    const takenGroomIds = new Set<number>();
+
+    // Shuffle unmarried men for randomness
+    for (let i = unmarriedMen.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [unmarriedMen[i], unmarriedMen[j]] = [unmarriedMen[j], unmarriedMen[i]];
     }
 
-    // 3. Reproduction (only married couples, traditional age 15-30)
-    const marriedWomen = state.humans.filter(
-      (h) =>
-        h.gender === "female" &&
-        h.age >= 15 &&
-        h.age <= 30 &&
-        h.spouseId !== undefined
-    );
+    for (const woman of unmarriedWomen) {
+      if (Math.random() >= 0.5) continue;
 
+      for (const man of unmarriedMen) {
+        if (takenGroomIds.has(man.id)) continue;
+        if (areSiblings(woman, man) || areDirectlyRelated(woman, man)) continue;
+
+        newlyMarried.push({ brideId: woman.id, groomId: man.id });
+        takenGroomIds.add(man.id);
+        break;
+      }
+    }
+
+    // 3. Reproduction (use humanById for O(1) spouse lookup)
     const newHumans: Human[] = [];
 
-    for (const woman of marriedWomen) {
-      const husband = state.humans.find(
-        (h) => h.id === woman.spouseId && h.isAlive
-      );
-      if (!husband) continue;
+    for (const woman of fertileMarriedWomen) {
+      const husband = humanById.get(woman.spouseId!);
+      if (!husband || !husband.isAlive || deceasedIds.has(husband.id)) continue;
 
       if (Math.random() < 0.3) {
         const gender: Gender = Math.random() > 0.5 ? "male" : "female";
@@ -232,40 +261,50 @@ export function createGameStore() {
       }
     }
 
+    // Create marriage lookup maps for O(1) access
+    const marriageMap = new Map<number, number>();
+    for (const { brideId, groomId } of newlyMarried) {
+      marriageMap.set(brideId, groomId);
+      marriageMap.set(groomId, brideId);
+    }
+
+    // Remove deceased names from usedNames
+    for (const id of deceasedIds) {
+      const human = humanById.get(id);
+      if (human) usedNames.delete(human.name);
+    }
+
+    // 4. SINGLE batch update: marriages + deaths + aging + births
+    setState("humans", (humans) => {
+      const result: Human[] = [];
+      for (const h of humans) {
+        if (deceasedIds.has(h.id)) continue; // Remove deceased
+
+        const newSpouse = marriageMap.get(h.id);
+        if (newSpouse !== undefined) {
+          result.push({ ...h, age: h.age + 1, spouseId: newSpouse });
+        } else {
+          result.push({ ...h, age: h.age + 1 });
+        }
+      }
+      // Add newborns
+      for (const newHuman of newHumans) {
+        result.push(newHuman);
+      }
+      return result;
+    });
+
+    if (newlyMarried.length > 0) addLog(`Married: ${newlyMarried.length} couples`);
     if (newHumans.length > 0) {
-      setState("humans", (humans) => [...humans, ...newHumans]);
       setState("nextId", (id) => id + newHumans.length);
       addLog(`Born: ${newHumans.length} children`);
     }
+    if (deceasedIds.size > 0) addLog(`Died: ${deceasedIds.size} people`);
 
-    // 4. Food consumption (1 per person)
-    const consumption = state.humans.length;
-    setState("food", (f) => f - consumption);
+    // 5. Food consumption
+    setState("food", (f) => f - state.humans.length);
 
-    // 5. Age everyone
-    setState(
-      "humans",
-      (human) => human.age >= 0,
-      "age",
-      (age) => age + 1
-    );
-
-    // 6. Death by age (normal distribution around 60)
-    const deceased: Human[] = [];
-    for (const human of state.humans) {
-      const prob = deathProbability(human.age);
-      if (Math.random() < prob) {
-        deceased.push(human);
-      }
-    }
-
-    if (deceased.length > 0) {
-      const deceasedIds = new Set(deceased.map(h => h.id));
-      addLog(`Died: ${deceased.length} people`);
-      setState("humans", (humans) => humans.filter((h) => !deceasedIds.has(h.id)));
-    }
-
-    // 7. Starvation
+    // 6. Starvation
     if (state.food < 0) {
       const starved = Math.min(
         state.humans.length,
@@ -278,20 +317,35 @@ export function createGameStore() {
       }
     }
 
-    // 8. Record history every year
+    // 7. Record history (optimized: mutate in place instead of spread)
     const historyPoint: HistoryPoint = {
       year: state.year,
       population: state.humans.length,
       births: newHumans.length,
       food: state.food,
     };
-    setState("history", (h) => [...h, historyPoint].slice(-1000));
+    setState("history", (h) => {
+      if (h.length >= 1000) {
+        // Shift first element and push new one (no spread)
+        const newHistory = h.slice(1);
+        newHistory.push(historyPoint);
+        return newHistory;
+      }
+      // Under limit: just push
+      const newHistory = h.slice();
+      newHistory.push(historyPoint);
+      return newHistory;
+    });
 
-    // 9. Advance year
+    // 8. Advance year
     setState("year", (y) => y + 1);
 
-    // 10. Save to localStorage every year
-    saveToStorage(state);
+    // 9. Save to localStorage periodically (not every tick)
+    tickCount++;
+    if (tickCount >= SAVE_INTERVAL) {
+      saveToStorage(state);
+      tickCount = 0;
+    }
 
     // Check for extinction
     if (state.humans.length === 0) {
