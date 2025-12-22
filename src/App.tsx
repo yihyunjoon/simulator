@@ -1,5 +1,6 @@
 import { For, Show } from 'solid-js'
 import { createGameStore } from './gameStore'
+import TimeControl from './components/TimeControl'
 
 function App() {
   const { state, isRunning, speed, togglePlayPause, changeSpeed, reset } = createGameStore()
@@ -102,44 +103,14 @@ function App() {
           </div>
         </div>
 
-        {/* Controls - Medieval Button Style */}
-        <div class="flex flex-wrap gap-3 justify-center items-center mb-6">
-          <button
-            onClick={togglePlayPause}
-            class={`px-8 py-3 font-serif text-lg tracking-wide border-2 transition-all ${
-              isRunning()
-                ? 'bg-gradient-to-b from-red-800 to-red-950 border-red-600 text-red-100 hover:from-red-700 hover:to-red-900'
-                : 'bg-gradient-to-b from-emerald-800 to-emerald-950 border-emerald-600 text-emerald-100 hover:from-emerald-700 hover:to-emerald-900'
-            }`}
-          >
-            {isRunning() ? '⏸ Halt' : '▶ Proceed'}
-          </button>
-
-          <div class="flex items-center bg-gradient-to-b from-stone-700 to-stone-900 border-2 border-stone-600 px-2 py-1">
-            <span class="text-stone-300 px-3 text-sm font-serif">Tempo</span>
-            <For each={[1, 2, 5, 10]}>
-              {(s) => (
-                <button
-                  onClick={() => changeSpeed(s)}
-                  class={`w-10 h-8 font-serif text-sm border transition-all mx-0.5 ${
-                    speed() === s
-                      ? 'bg-amber-700 border-amber-500 text-amber-100'
-                      : 'bg-stone-800 border-stone-600 text-stone-400 hover:bg-stone-700 hover:text-stone-200'
-                  }`}
-                >
-                  {s}×
-                </button>
-              )}
-            </For>
-          </div>
-
-          <button
-            onClick={reset}
-            class="px-6 py-3 bg-gradient-to-b from-stone-700 to-stone-900 border-2 border-stone-600 text-stone-300 font-serif tracking-wide hover:from-stone-600 hover:to-stone-800 transition-all"
-          >
-            ↺ Restart
-          </button>
-        </div>
+        {/* Time Control Component - Fixed Top Left */}
+        <TimeControl
+          isRunning={isRunning}
+          speed={speed}
+          togglePlayPause={togglePlayPause}
+          changeSpeed={changeSpeed}
+          reset={reset}
+        />
 
         {/* Main Content Grid */}
         <div class="grid md:grid-cols-3 gap-4 mb-6">
