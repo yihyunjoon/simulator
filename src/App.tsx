@@ -1,6 +1,7 @@
 import { For, Show } from 'solid-js'
 import { createGameStore } from './gameStore'
 import TimeControl from './components/TimeControl'
+import FamilyTree from './components/FamilyTree'
 
 function App() {
   const { state, isRunning, speed, togglePlayPause, changeSpeed, reset } = createGameStore()
@@ -16,6 +17,11 @@ function App() {
     if (perPerson >= 10) return { label: 'Sufficient', color: 'text-amber-700' }
     if (perPerson >= 5) return { label: 'Scarce', color: 'text-orange-700' }
     return { label: 'Famine', color: 'text-red-800' }
+  }
+
+  const formatYear = (year: number) => {
+    if (year <= 0) return `${Math.abs(year)} BC`
+    return `${year} AD`
   }
 
   const ageGroups = () => {
@@ -77,8 +83,8 @@ function App() {
             <div class="grid grid-cols-2 md:grid-cols-4 divide-x divide-amber-900/20">
               {/* Year */}
               <div class="p-4 text-center">
-                <div class="text-xs text-amber-800/60 uppercase tracking-widest font-serif mb-1">Anno Domini</div>
-                <div class="text-4xl font-serif text-amber-950 font-bold">{state.year}</div>
+                <div class="text-xs text-amber-800/60 uppercase tracking-widest font-serif mb-1">Annus</div>
+                <div class="text-4xl font-serif text-amber-950 font-bold">{formatYear(state.year)}</div>
               </div>
 
               {/* Population */}
@@ -245,7 +251,7 @@ function App() {
         </div>
 
         {/* Chronicle Log - Scroll Style */}
-        <div class="bg-gradient-to-b from-amber-100 to-amber-50 border-4 border-amber-900/40 overflow-hidden">
+        <div class="bg-gradient-to-b from-amber-100 to-amber-50 border-4 border-amber-900/40 overflow-hidden mb-6">
           <div class="bg-gradient-to-r from-amber-900 to-amber-800 px-4 py-2 border-b-2 border-amber-950">
             <h2 class="text-amber-100 font-serif tracking-widest text-sm uppercase">
               ⚜ The Royal Chronicle ⚜
@@ -263,6 +269,9 @@ function App() {
             </div>
           </div>
         </div>
+
+        {/* Family Tree */}
+        <FamilyTree allHumans={state.allHumans} />
 
         {/* Game Over - Royal Decree Style */}
         <Show when={state.humans.length === 0}>
