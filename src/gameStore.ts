@@ -1,61 +1,132 @@
-import { createStore } from "solid-js/store";
+import { createStore, reconcile } from "solid-js/store";
 import { createSignal, onCleanup } from "solid-js";
-import type { GameState, Human, Gender } from "./types";
+import type { GameState, Human, Gender, HistoryPoint } from "./types";
+
+const STORAGE_KEY = "chronicles-save";
 
 const maleNames = [
-  "Adam",
-  "Noah",
-  "Liam",
-  "Oliver",
-  "James",
-  "William",
-  "Benjamin",
-  "Lucas",
-  "Henry",
-  "Alexander",
-];
-const femaleNames = [
-  "Eve",
-  "Emma",
-  "Olivia",
-  "Ava",
-  "Sophia",
-  "Isabella",
-  "Mia",
-  "Charlotte",
-  "Amelia",
-  "Harper",
+  "Adam", "Noah", "Liam", "Oliver", "James", "William", "Benjamin", "Lucas", "Henry", "Alexander",
+  "Ethan", "Michael", "Daniel", "Matthew", "David", "Joseph", "Samuel", "John", "Robert", "Thomas",
+  "Charles", "George", "Edward", "Frank", "Arthur", "Harold", "Albert", "Ernest", "Alfred", "Herbert",
+  "Marcus", "Julius", "Augustus", "Nero", "Titus", "Cassius", "Felix", "Maximus", "Lucius", "Gaius",
+  "Erik", "Bjorn", "Ragnar", "Leif", "Olaf", "Sven", "Thor", "Odin", "Freyr", "Baldr",
 ];
 
-function getRandomName(gender: Gender): string {
+const femaleNames = [
+  "Eve", "Emma", "Olivia", "Ava", "Sophia", "Isabella", "Mia", "Charlotte", "Amelia", "Harper",
+  "Emily", "Elizabeth", "Victoria", "Grace", "Lily", "Hannah", "Sarah", "Rachel", "Rebecca", "Ruth",
+  "Mary", "Margaret", "Catherine", "Eleanor", "Alice", "Clara", "Rose", "Helen", "Dorothy", "Florence",
+  "Julia", "Livia", "Octavia", "Claudia", "Aurelia", "Cornelia", "Flavia", "Lucia", "Sabina", "Valeria",
+  "Freya", "Ingrid", "Astrid", "Sigrid", "Helga", "Gudrun", "Thyra", "Ragnhild", "Solveig", "Eira",
+];
+
+const DEATH_AGE_MEAN = 60;
+const DEATH_AGE_STD = 10;
+
+function getRandomName(gender: Gender, usedNames: Set<string>): string {
   const names = gender === "male" ? maleNames : femaleNames;
-  return names[Math.floor(Math.random() * names.length)];
+  const availableNames = names.filter(n => !usedNames.has(n));
+  if (availableNames.length > 0) {
+    const name = availableNames[Math.floor(Math.random() * availableNames.length)];
+    usedNames.add(name);
+    return name;
+  }
+  const baseName = names[Math.floor(Math.random() * names.length)];
+  let suffix = 2;
+  while (usedNames.has(`${baseName} ${suffix}`)) suffix++;
+  const newName = `${baseName} ${suffix}`;
+  usedNames.add(newName);
+  return newName;
 }
 
-const createInitialHumans = (): Human[] => [
-  { id: 1, name: "Eve", gender: "female", age: 15, birthYear: -8014, isAlive: true, spouseId: 2 },
-  { id: 2, name: "Adam", gender: "male", age: 15, birthYear: -8014, isAlive: true, spouseId: 1 },
-  { id: 3, name: "Pandora", gender: "female", age: 15, birthYear: -8014, isAlive: true, spouseId: 4 },
-  { id: 4, name: "Epimetheus", gender: "male", age: 15, birthYear: -8014, isAlive: true, spouseId: 3 },
-];
+function deathProbability(age: number): number {
+  if (age < 40) return 0.001;
+  const z = (age - DEATH_AGE_MEAN) / DEATH_AGE_STD;
+  const prob = Math.exp(-0.5 * z * z) / (DEATH_AGE_STD * Math.sqrt(2 * Math.PI));
+  return Math.min(0.95, prob * 15 + (age > 80 ? 0.5 : 0));
+}
 
-const initialState: GameState = {
-  humans: createInitialHumans(),
-  allHumans: createInitialHumans(),
-  food: 100,
-  year: -8000,
-  nextId: 5,
-  logs: ["8000 BC: Simulation started with two couples"],
-};
+function createInitialHumans(): Human[] {
+  const humans: Human[] = [];
+  const usedNames = new Set<string>();
+
+  for (let i = 0; i < 100; i++) {
+    const femaleId = i * 2 + 1;
+    const maleId = i * 2 + 2;
+
+    humans.push({
+      id: femaleId,
+      name: getRandomName("female", usedNames),
+      gender: "female",
+      age: 15,
+      birthYear: -8014,
+      isAlive: true,
+      spouseId: maleId,
+    });
+
+    humans.push({
+      id: maleId,
+      name: getRandomName("male", usedNames),
+      gender: "male",
+      age: 15,
+      birthYear: -8014,
+      isAlive: true,
+      spouseId: femaleId,
+    });
+  }
+
+  return humans;
+}
+
+function createDefaultState(): GameState {
+  return {
+    humans: createInitialHumans(),
+    food: 2000,
+    year: -8000,
+    nextId: 201,
+    logs: ["8000 BC: Simulation started with 100 couples"],
+    history: [{ year: -8000, population: 200, births: 0, food: 2000 }],
+  };
+}
+
+function loadFromStorage(): GameState | null {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved) as GameState;
+      // Validate basic structure
+      if (parsed.humans && parsed.year && parsed.food !== undefined) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error("Failed to load save:", e);
+  }
+  return null;
+}
+
+function saveToStorage(state: GameState): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.error("Failed to save:", e);
+  }
+}
+
+function clearStorage(): void {
+  localStorage.removeItem(STORAGE_KEY);
+}
 
 export function createGameStore() {
-  const [state, setState] = createStore<GameState>(
-    structuredClone(initialState)
-  );
+  const savedState = loadFromStorage();
+  const initialState = savedState || createDefaultState();
+
+  const [state, setState] = createStore<GameState>(initialState);
   const [isRunning, setIsRunning] = createSignal(false);
   const [speed, setSpeed] = createSignal(1);
 
   let intervalId: number | undefined;
+  const usedNames = new Set<string>(state.humans.map(h => h.name));
 
   function formatYear(year: number): string {
     if (year <= 0) return `${Math.abs(year)} BC`;
@@ -68,12 +139,6 @@ export function createGameStore() {
     );
   }
 
-  function markDeceased(humanIds: number[], deathYear: number) {
-    setState("allHumans", (h) => humanIds.includes(h.id), "isAlive", false);
-    setState("allHumans", (h) => humanIds.includes(h.id), "deathYear", deathYear);
-  }
-
-  // Check if two people share a parent (siblings/half-siblings)
   function areSiblings(a: Human, b: Human): boolean {
     if (!a.motherId && !a.fatherId) return false;
     if (!b.motherId && !b.fatherId) return false;
@@ -82,11 +147,8 @@ export function createGameStore() {
     return sameMother || sameFather;
   }
 
-  // Check if one is parent/grandparent of the other
   function areDirectlyRelated(a: Human, b: Human): boolean {
-    // a is parent of b
     if (b.motherId === a.id || b.fatherId === a.id) return true;
-    // b is parent of a
     if (a.motherId === b.id || a.fatherId === b.id) return true;
     return false;
   }
@@ -112,10 +174,9 @@ export function createGameStore() {
       (h) => h.gender === "male" && h.age >= 15 && !h.spouseId
     );
 
-    const newlyMarried: { odessa: Human; groom: Human }[] = [];
+    const newlyMarried: { bride: Human; groom: Human }[] = [];
 
     for (const woman of unmarriedWomen) {
-      // Find eligible men (not siblings, not directly related)
       const eligibleMen = unmarriedMen.filter(
         (m) =>
           !newlyMarried.some((nm) => nm.groom.id === m.id) &&
@@ -125,17 +186,17 @@ export function createGameStore() {
 
       if (eligibleMen.length > 0 && Math.random() < 0.5) {
         const groom = eligibleMen[Math.floor(Math.random() * eligibleMen.length)];
-        newlyMarried.push({ odessa: woman, groom });
+        newlyMarried.push({ bride: woman, groom });
       }
     }
 
-    // Apply marriages
-    for (const { odessa, groom } of newlyMarried) {
-      setState("humans", (h) => h.id === odessa.id, "spouseId", groom.id);
-      setState("humans", (h) => h.id === groom.id, "spouseId", odessa.id);
-      setState("allHumans", (h) => h.id === odessa.id, "spouseId", groom.id);
-      setState("allHumans", (h) => h.id === groom.id, "spouseId", odessa.id);
-      addLog(`Married: ${groom.name} & ${odessa.name}`);
+    for (const { bride, groom } of newlyMarried) {
+      setState("humans", (h) => h.id === bride.id, "spouseId", groom.id);
+      setState("humans", (h) => h.id === groom.id, "spouseId", bride.id);
+    }
+
+    if (newlyMarried.length > 0) {
+      addLog(`Married: ${newlyMarried.length} couples`);
     }
 
     // 3. Reproduction (only married couples, traditional age 15-30)
@@ -155,12 +216,11 @@ export function createGameStore() {
       );
       if (!husband) continue;
 
-      // 30% chance of birth per married couple per year
       if (Math.random() < 0.3) {
         const gender: Gender = Math.random() > 0.5 ? "male" : "female";
         const newHuman: Human = {
           id: state.nextId + newHumans.length,
-          name: getRandomName(gender),
+          name: getRandomName(gender, usedNames),
           gender,
           age: 0,
           motherId: woman.id,
@@ -174,9 +234,8 @@ export function createGameStore() {
 
     if (newHumans.length > 0) {
       setState("humans", (humans) => [...humans, ...newHumans]);
-      setState("allHumans", (allHumans) => [...allHumans, ...newHumans]);
       setState("nextId", (id) => id + newHumans.length);
-      addLog(`Born: ${newHumans.map((h) => h.name).join(", ")}`);
+      addLog(`Born: ${newHumans.length} children`);
     }
 
     // 4. Food consumption (1 per person)
@@ -190,22 +249,20 @@ export function createGameStore() {
       "age",
       (age) => age + 1
     );
-    setState(
-      "allHumans",
-      (human) => human.isAlive,
-      "age",
-      (age) => age + 1
-    );
 
-    // 6. Death by old age (60+)
-    const deceased = state.humans.filter((h) => h.age >= 60);
+    // 6. Death by age (normal distribution around 60)
+    const deceased: Human[] = [];
+    for (const human of state.humans) {
+      const prob = deathProbability(human.age);
+      if (Math.random() < prob) {
+        deceased.push(human);
+      }
+    }
+
     if (deceased.length > 0) {
-      addLog(`Died: ${deceased.map((h) => `${h.name}(${h.age})`).join(", ")}`);
-      markDeceased(
-        deceased.map((h) => h.id),
-        state.year
-      );
-      setState("humans", (humans) => humans.filter((h) => h.age < 60));
+      const deceasedIds = new Set(deceased.map(h => h.id));
+      addLog(`Died: ${deceased.length} people`);
+      setState("humans", (humans) => humans.filter((h) => !deceasedIds.has(h.id)));
     }
 
     // 7. Starvation
@@ -215,23 +272,31 @@ export function createGameStore() {
         Math.ceil(Math.abs(state.food) / 5)
       );
       if (starved > 0) {
-        const victims = state.humans.slice(0, starved);
-        addLog(`Starved: ${victims.map((h) => h.name).join(", ")}`);
-        markDeceased(
-          victims.map((h) => h.id),
-          state.year
-        );
+        addLog(`Starved: ${starved} people`);
         setState("humans", (humans) => humans.slice(starved));
         setState("food", 0);
       }
     }
 
-    // 8. Advance year
+    // 8. Record history every year
+    const historyPoint: HistoryPoint = {
+      year: state.year,
+      population: state.humans.length,
+      births: newHumans.length,
+      food: state.food,
+    };
+    setState("history", (h) => [...h, historyPoint].slice(-1000));
+
+    // 9. Advance year
     setState("year", (y) => y + 1);
+
+    // 10. Save to localStorage every year
+    saveToStorage(state);
 
     // Check for extinction
     if (state.humans.length === 0) {
       addLog("Civilization has collapsed!");
+      saveToStorage(state);
       pause();
     }
   }
@@ -248,6 +313,8 @@ export function createGameStore() {
       clearInterval(intervalId);
       intervalId = undefined;
     }
+    // Save when paused
+    saveToStorage(state);
   }
 
   function togglePlayPause() {
@@ -268,19 +335,16 @@ export function createGameStore() {
 
   function reset() {
     pause();
-    const initialHumans = createInitialHumans();
-    setState({
-      humans: initialHumans,
-      allHumans: structuredClone(initialHumans),
-      food: 100,
-      year: -8000,
-      nextId: 5,
-      logs: ["8000 BC: Simulation started with two couples"],
-    });
+    clearStorage();
+    usedNames.clear();
+    const newState = createDefaultState();
+    newState.humans.forEach(h => usedNames.add(h.name));
+    setState(reconcile(newState));
   }
 
   onCleanup(() => {
     if (intervalId) clearInterval(intervalId);
+    saveToStorage(state);
   });
 
   return {

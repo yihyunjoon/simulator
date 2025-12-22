@@ -13,11 +13,18 @@ export interface Human {
   isAlive: boolean
 }
 
+export interface HistoryPoint {
+  year: number
+  population: number
+  births: number
+  food: number
+}
+
 export interface GameState {
   humans: Human[]
-  allHumans: Human[] // includes deceased for family tree
   food: number
   year: number
   nextId: number
   logs: string[]
+  history: HistoryPoint[]
 }
