@@ -1,4 +1,4 @@
-import { For, onMount, onCleanup } from "solid-js";
+import { For, onMount, onCleanup, createSignal } from "solid-js";
 import type { Accessor } from "solid-js";
 import { SPEED_OPTIONS } from "../constants";
 
@@ -11,6 +11,63 @@ interface TimeControlProps {
 }
 
 export default function TimeControl(props: TimeControlProps) {
+  // Draggable position state
+  const [position, setPosition] = createSignal({ x: 16, y: 16 }); // top-4 left-4 = 16px
+  const [isDragging, setIsDragging] = createSignal(false);
+  let dragStart = { x: 0, y: 0 };
+  let posStart = { x: 0, y: 0 };
+
+  const handleDragStart = (clientX: number, clientY: number) => {
+    setIsDragging(true);
+    dragStart = { x: clientX, y: clientY };
+    posStart = position();
+  };
+
+  const handleDragMove = (clientX: number, clientY: number) => {
+    if (!isDragging()) return;
+    const dx = clientX - dragStart.x;
+    const dy = clientY - dragStart.y;
+    setPosition({
+      x: Math.max(0, Math.min(window.innerWidth - 176, posStart.x + dx)), // 176 = w-44 = 11rem
+      y: Math.max(0, Math.min(window.innerHeight - 200, posStart.y + dy)),
+    });
+  };
+
+  const handleDragEnd = () => {
+    setIsDragging(false);
+  };
+
+  // Touch event handlers
+  const onTouchStart = (e: TouchEvent) => {
+    const touch = e.touches[0];
+    handleDragStart(touch.clientX, touch.clientY);
+  };
+
+  const onTouchMove = (e: TouchEvent) => {
+    if (!isDragging()) return;
+    e.preventDefault(); // Prevent scrolling while dragging
+    const touch = e.touches[0];
+    handleDragMove(touch.clientX, touch.clientY);
+  };
+
+  const onTouchEnd = () => {
+    handleDragEnd();
+  };
+
+  // Mouse event handlers (for desktop support)
+  const onMouseDown = (e: MouseEvent) => {
+    e.preventDefault();
+    handleDragStart(e.clientX, e.clientY);
+  };
+
+  const onMouseMove = (e: MouseEvent) => {
+    handleDragMove(e.clientX, e.clientY);
+  };
+
+  const onMouseUp = () => {
+    handleDragEnd();
+  };
+
   const handleKeyDown = (e: KeyboardEvent) => {
     // Ignore if typing in an input field
     if (
@@ -31,24 +88,44 @@ export default function TimeControl(props: TimeControlProps) {
 
   onMount(() => {
     window.addEventListener("keydown", handleKeyDown);
+    // Global mouse/touch move and up events for drag
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("touchend", onTouchEnd);
   });
 
   onCleanup(() => {
     window.removeEventListener("keydown", handleKeyDown);
+    window.removeEventListener("mousemove", onMouseMove);
+    window.removeEventListener("mouseup", onMouseUp);
+    window.removeEventListener("touchmove", onTouchMove);
+    window.removeEventListener("touchend", onTouchEnd);
   });
 
   return (
     <nav
-      class="fixed top-4 left-4 z-50 w-44"
+      class="fixed z-50 w-44"
+      style={{
+        left: `${position().x}px`,
+        top: `${position().y}px`,
+      }}
       role="region"
       aria-label="Time controls"
     >
       <div class="bg-linear-to-b from-stone-800/95 to-stone-900/95 border-2 border-amber-700/50 backdrop-blur-sm shadow-xl">
-        {/* Header */}
-        <div class="bg-linear-to-r from-amber-900/80 to-amber-800/80 px-3 py-1.5 border-b border-amber-700/50">
-          <span class="text-amber-100 font-serif text-xs tracking-widest uppercase">
-            Tempus
-          </span>
+        {/* Header - Drag Handle */}
+        <div
+          class="bg-linear-to-r from-amber-900/80 to-amber-800/80 px-3 py-1.5 border-b border-amber-700/50 cursor-grab active:cursor-grabbing select-none touch-none"
+          onMouseDown={onMouseDown}
+          onTouchStart={onTouchStart}
+        >
+          <div class="flex items-center justify-between">
+            <span class="text-amber-100 font-serif text-xs tracking-widest uppercase">
+              Tempus
+            </span>
+            <span class="text-amber-500/60 text-xs" aria-hidden="true">⠿</span>
+          </div>
         </div>
 
         <div class="p-3 space-y-2">
