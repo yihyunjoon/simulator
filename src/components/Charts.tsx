@@ -153,15 +153,20 @@ function Chart(props: { config: ChartConfig; history: HistoryPoint[] }) {
   }
 
   return (
-    <div class="bg-amber-50 border border-amber-300 p-2">
-      <div class="text-xs font-serif text-amber-800 mb-1 text-center">
+    <figure class="bg-amber-50 border border-amber-300 p-2" role="img" aria-label={`${props.config.title} chart showing current value: ${currentValue().toLocaleString()}`}>
+      <figcaption class="text-xs font-serif text-amber-800 mb-1 text-center">
         {props.config.title}
-      </div>
-      <svg ref={svgRef} class="w-full" style={{ height: `${CHART_HEIGHT}px` }} />
-      <div class="text-center text-sm font-serif font-bold" style={{ color: props.config.color }}>
+      </figcaption>
+      <svg
+        ref={svgRef}
+        class="w-full"
+        style={{ height: `${CHART_HEIGHT}px` }}
+        aria-hidden="true"
+      />
+      <div class="text-center text-sm font-serif font-bold" style={{ color: props.config.color }} aria-hidden="true">
         {currentValue().toLocaleString()}
       </div>
-    </div>
+    </figure>
   )
 }
 
@@ -173,9 +178,9 @@ export default function Charts(props: ChartsProps) {
   ]
 
   return (
-    <div class="bg-linear-to-b from-amber-100 to-amber-50 border-4 border-amber-900/40 overflow-hidden">
+    <section class="bg-linear-to-b from-amber-100 to-amber-50 border-4 border-amber-900/40 overflow-hidden" role="region" aria-labelledby="charts-heading">
       <div class="bg-linear-to-r from-amber-900 to-amber-800 px-4 py-2 border-b-2 border-amber-950">
-        <h2 class="text-amber-100 font-serif tracking-widest text-sm uppercase">
+        <h2 id="charts-heading" class="text-amber-100 font-serif tracking-widest text-sm uppercase">
           Statistics
         </h2>
       </div>
@@ -185,6 +190,6 @@ export default function Charts(props: ChartsProps) {
           {(chart) => <Chart config={chart} history={props.history} />}
         </For>
       </div>
-    </div>
+    </section>
   )
 }
