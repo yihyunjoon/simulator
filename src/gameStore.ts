@@ -195,9 +195,35 @@ function isValidGameState(obj: unknown): obj is GameState {
 }
 
 /**
+ * Check if localStorage is available
+ */
+function isLocalStorageAvailable(): boolean {
+  try {
+    const testKey = "__storage_test__";
+    localStorage.setItem(testKey, testKey);
+    localStorage.removeItem(testKey);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Track storage availability
+let storageAvailable = isLocalStorageAvailable();
+let storageWarningShown = false;
+
+/**
  * Load game state from localStorage with validation
  */
 function loadFromStorage(): GameState | null {
+  if (!storageAvailable) {
+    if (!storageWarningShown) {
+      console.warn("localStorage is not available. Progress will not be saved.");
+      storageWarningShown = true;
+    }
+    return null;
+  }
+
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (!saved) return null;
@@ -237,6 +263,8 @@ function loadFromStorage(): GameState | null {
  * Save game state to localStorage with version info
  */
 function saveToStorage(state: GameState): void {
+  if (!storageAvailable) return;
+
   try {
     const saveData: SaveData = {
       version: SAVE_VERSION,
@@ -245,12 +273,24 @@ function saveToStorage(state: GameState): void {
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(saveData));
   } catch (e) {
-    console.error("Failed to save:", e);
+    // Handle quota exceeded or other storage errors
+    if (e instanceof DOMException && e.name === "QuotaExceededError") {
+      console.error("Storage quota exceeded. Unable to save progress.");
+    } else {
+      console.error("Failed to save:", e);
+    }
+    // Disable further save attempts on persistent errors
+    storageAvailable = false;
   }
 }
 
 function clearStorage(): void {
-  localStorage.removeItem(STORAGE_KEY);
+  if (!storageAvailable) return;
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Ignore errors when clearing
+  }
 }
 
 export function createGameStore() {
