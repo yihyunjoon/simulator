@@ -1,4 +1,4 @@
-import { For, onMount, onCleanup } from "solid-js";
+import { For, onMount, onCleanup, createSignal } from "solid-js";
 import type { Accessor } from "solid-js";
 import { SPEED_OPTIONS } from "../constants";
 
@@ -11,6 +11,11 @@ interface TimeControlProps {
 }
 
 export default function TimeControl(props: TimeControlProps) {
+  const [position, setPosition] = createSignal({ x: 16, y: 16 });
+  const [isDragging, setIsDragging] = createSignal(false);
+  let dragStart = { x: 0, y: 0 };
+  let navRef: HTMLElement | undefined;
+
   const handleKeyDown = (e: KeyboardEvent) => {
     // Ignore if typing in an input field
     if (
@@ -29,26 +34,87 @@ export default function TimeControl(props: TimeControlProps) {
     }
   };
 
+  // Touch drag handlers
+  const handleTouchStart = (e: TouchEvent) => {
+    if (e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    dragStart = {
+      x: touch.clientX - position().x,
+      y: touch.clientY - position().y,
+    };
+    setIsDragging(true);
+  };
+
+  const handleTouchMove = (e: TouchEvent) => {
+    if (!isDragging() || e.touches.length !== 1) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const newX = Math.max(0, Math.min(window.innerWidth - 176, touch.clientX - dragStart.x));
+    const newY = Math.max(0, Math.min(window.innerHeight - 200, touch.clientY - dragStart.y));
+    setPosition({ x: newX, y: newY });
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+  };
+
+  // Mouse drag handlers (for desktop testing)
+  const handleMouseDown = (e: MouseEvent) => {
+    dragStart = {
+      x: e.clientX - position().x,
+      y: e.clientY - position().y,
+    };
+    setIsDragging(true);
+    e.preventDefault();
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isDragging()) return;
+    const newX = Math.max(0, Math.min(window.innerWidth - 176, e.clientX - dragStart.x));
+    const newY = Math.max(0, Math.min(window.innerHeight - 200, e.clientY - dragStart.y));
+    setPosition({ x: newX, y: newY });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
   onMount(() => {
     window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    window.addEventListener("touchend", handleTouchEnd);
   });
 
   onCleanup(() => {
     window.removeEventListener("keydown", handleKeyDown);
+    window.removeEventListener("mousemove", handleMouseMove);
+    window.removeEventListener("mouseup", handleMouseUp);
+    window.removeEventListener("touchmove", handleTouchMove);
+    window.removeEventListener("touchend", handleTouchEnd);
   });
 
   return (
     <nav
-      class="fixed top-4 left-4 z-50 w-44"
+      ref={navRef}
+      class="fixed z-50 w-44"
+      style={{ left: `${position().x}px`, top: `${position().y}px` }}
       role="region"
       aria-label="Time controls"
     >
       <div class="bg-linear-to-b from-stone-800/95 to-stone-900/95 border-2 border-amber-700/50 backdrop-blur-sm shadow-xl">
-        {/* Header */}
-        <div class="bg-linear-to-r from-amber-900/80 to-amber-800/80 px-3 py-1.5 border-b border-amber-700/50">
+        {/* Draggable Header */}
+        <div
+          class="bg-linear-to-r from-amber-900/80 to-amber-800/80 px-3 py-1.5 border-b border-amber-700/50 cursor-move select-none flex items-center justify-between"
+          onTouchStart={handleTouchStart}
+          onMouseDown={handleMouseDown}
+          aria-label="Drag to move controls"
+        >
           <span class="text-amber-100 font-serif text-xs tracking-widest uppercase">
             Tempus
           </span>
+          <span class="text-amber-100/50 text-xs" aria-hidden="true">⋮⋮</span>
         </div>
 
         <div class="p-3 space-y-2">
