@@ -98,6 +98,9 @@ export const FOOD_STATUS_SCARCE = 5;
 /** LocalStorage key for save data */
 export const STORAGE_KEY = "chronicles-save";
 
+/** Save data version for compatibility checking */
+export const SAVE_VERSION = 1;
+
 /** Save interval in ticks */
 export const SAVE_INTERVAL = 10;
 

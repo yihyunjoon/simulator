@@ -1,10 +1,11 @@
 import { createStore, reconcile } from "solid-js/store";
 import { createSignal, onCleanup } from "solid-js";
-import type { GameState, Human, Gender, HistoryPoint } from "./types";
+import type { GameState, Human, Gender, HistoryPoint, SaveData } from "./types";
 import { formatYear } from "./utils";
 import {
   STORAGE_KEY,
   SAVE_INTERVAL,
+  SAVE_VERSION,
   MAX_LOG_ENTRIES,
   MAX_HISTORY_POINTS,
   GOMPERTZ_A,
@@ -115,25 +116,134 @@ function createDefaultState(): GameState {
   };
 }
 
+/**
+ * Validate a Human object structure
+ */
+function isValidHuman(obj: unknown): obj is Human {
+  if (!obj || typeof obj !== "object") return false;
+  const h = obj as Record<string, unknown>;
+  return (
+    typeof h.id === "number" &&
+    typeof h.name === "string" &&
+    (h.gender === "male" || h.gender === "female") &&
+    typeof h.age === "number" &&
+    h.age >= 0 &&
+    typeof h.isAlive === "boolean" &&
+    (h.birthYear === undefined || typeof h.birthYear === "number") &&
+    (h.deathYear === undefined || typeof h.deathYear === "number") &&
+    (h.motherId === undefined || typeof h.motherId === "number") &&
+    (h.fatherId === undefined || typeof h.fatherId === "number") &&
+    (h.spouseId === undefined || typeof h.spouseId === "number")
+  );
+}
+
+/**
+ * Validate a HistoryPoint object structure
+ */
+function isValidHistoryPoint(obj: unknown): obj is HistoryPoint {
+  if (!obj || typeof obj !== "object") return false;
+  const h = obj as Record<string, unknown>;
+  return (
+    typeof h.year === "number" &&
+    typeof h.population === "number" &&
+    typeof h.births === "number" &&
+    typeof h.food === "number"
+  );
+}
+
+/**
+ * Validate entire GameState structure
+ */
+function isValidGameState(obj: unknown): obj is GameState {
+  if (!obj || typeof obj !== "object") return false;
+  const state = obj as Record<string, unknown>;
+
+  // Check required fields
+  if (
+    typeof state.food !== "number" ||
+    typeof state.year !== "number" ||
+    typeof state.nextId !== "number" ||
+    !Array.isArray(state.humans) ||
+    !Array.isArray(state.logs) ||
+    !Array.isArray(state.history)
+  ) {
+    return false;
+  }
+
+  // Validate all humans (sample check for large arrays)
+  const humansToCheck = state.humans.length > 100
+    ? state.humans.slice(0, 50).concat(state.humans.slice(-50))
+    : state.humans;
+  if (!humansToCheck.every(isValidHuman)) {
+    return false;
+  }
+
+  // Validate logs are strings
+  if (!state.logs.every((log: unknown) => typeof log === "string")) {
+    return false;
+  }
+
+  // Validate history points (sample check)
+  const historyToCheck = state.history.length > 100
+    ? state.history.slice(0, 50).concat(state.history.slice(-50))
+    : state.history;
+  if (!historyToCheck.every(isValidHistoryPoint)) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Load game state from localStorage with validation
+ */
 function loadFromStorage(): GameState | null {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved) as GameState;
-      // Validate basic structure
-      if (parsed.humans && parsed.year && parsed.food !== undefined) {
+    if (!saved) return null;
+
+    const parsed = JSON.parse(saved);
+
+    // Handle versioned save format
+    if (parsed && typeof parsed === "object" && "version" in parsed) {
+      const saveData = parsed as SaveData;
+
+      // Check version compatibility
+      if (saveData.version > SAVE_VERSION) {
+        console.warn(`Save version ${saveData.version} is newer than supported ${SAVE_VERSION}`);
+        return null;
+      }
+
+      // Validate state structure
+      if (isValidGameState(saveData.state)) {
+        return saveData.state;
+      }
+    } else {
+      // Legacy save format (no version)
+      if (isValidGameState(parsed)) {
         return parsed;
       }
     }
+
+    console.warn("Save data validation failed, starting fresh");
+    return null;
   } catch (e) {
     console.error("Failed to load save:", e);
+    return null;
   }
-  return null;
 }
 
+/**
+ * Save game state to localStorage with version info
+ */
 function saveToStorage(state: GameState): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const saveData: SaveData = {
+      version: SAVE_VERSION,
+      state,
+      savedAt: Date.now(),
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(saveData));
   } catch (e) {
     console.error("Failed to save:", e);
   }
