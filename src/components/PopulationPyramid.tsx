@@ -35,9 +35,13 @@ export default function PopulationPyramid(props: PopulationPyramidProps) {
   })
 
   return (
-    <div class="bg-linear-to-b from-amber-100 to-amber-50 border-4 border-amber-900/40 overflow-hidden">
+    <section
+      class="bg-linear-to-b from-amber-100 to-amber-50 border-4 border-amber-900/40 overflow-hidden"
+      role="region"
+      aria-labelledby="pyramid-heading"
+    >
       <div class="bg-linear-to-r from-amber-900 to-amber-800 px-4 py-2 border-b-2 border-amber-950">
-        <h2 class="text-amber-100 font-serif tracking-widest text-sm uppercase">
+        <h2 id="pyramid-heading" class="text-amber-100 font-serif tracking-widest text-sm uppercase">
           Population Pyramid
         </h2>
       </div>
@@ -48,26 +52,30 @@ export default function PopulationPyramid(props: PopulationPyramidProps) {
           <span class="text-rose-800">Female</span>
         </div>
 
-        <div class="space-y-1">
+        <div class="space-y-1" role="list" aria-label="Age distribution by gender">
           <For each={ageGroups()}>
             {(group) => (
-              <div class="flex items-center gap-1">
-                <div class="flex-1 flex justify-end">
+              <div
+                class="flex items-center gap-1"
+                role="listitem"
+                aria-label={`Age ${group.label}: ${group.males} males, ${group.females} females`}
+              >
+                <div class="flex-1 flex justify-end" aria-hidden="true">
                   <div
                     class="h-4 bg-linear-to-l from-blue-600 to-blue-400 border border-blue-700/50"
                     style={{ width: `${(group.males / group.maxCount) * 100}%`, 'min-width': group.males > 0 ? '2px' : '0' }}
                   />
                 </div>
-                <div class="w-6 text-right text-xs font-serif text-blue-900">
+                <div class="w-6 text-right text-xs font-serif text-blue-900" aria-hidden="true">
                   {group.males}
                 </div>
-                <div class="w-10 text-center text-[10px] font-serif text-amber-800 bg-amber-200/50 border border-amber-400/30">
+                <div class="w-10 text-center text-[10px] font-serif text-amber-800 bg-amber-200/50 border border-amber-400/30" aria-hidden="true">
                   {group.label}
                 </div>
-                <div class="w-6 text-left text-xs font-serif text-rose-900">
+                <div class="w-6 text-left text-xs font-serif text-rose-900" aria-hidden="true">
                   {group.females}
                 </div>
-                <div class="flex-1 flex justify-start">
+                <div class="flex-1 flex justify-start" aria-hidden="true">
                   <div
                     class="h-4 bg-linear-to-r from-rose-400 to-rose-600 border border-rose-700/50"
                     style={{ width: `${(group.females / group.maxCount) * 100}%`, 'min-width': group.females > 0 ? '2px' : '0' }}
@@ -78,6 +86,6 @@ export default function PopulationPyramid(props: PopulationPyramidProps) {
           </For>
         </div>
       </div>
-    </div>
+    </section>
   )
 }

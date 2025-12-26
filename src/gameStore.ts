@@ -1,8 +1,32 @@
 import { createStore, reconcile } from "solid-js/store";
 import { createSignal, onCleanup } from "solid-js";
-import type { GameState, Human, Gender, HistoryPoint } from "./types";
-
-const STORAGE_KEY = "chronicles-save";
+import type { GameState, Human, Gender, HistoryPoint, SaveData } from "./types";
+import { formatYear } from "./utils";
+import {
+  STORAGE_KEY,
+  SAVE_INTERVAL,
+  SAVE_VERSION,
+  MAX_LOG_ENTRIES,
+  MAX_HISTORY_POINTS,
+  GOMPERTZ_A,
+  GOMPERTZ_B,
+  GOMPERTZ_C,
+  INFANT_MORTALITY_RATE,
+  CHILD_MORTALITY_RATE,
+  MAX_DEATH_PROBABILITY,
+  INITIAL_YEAR,
+  INITIAL_COUPLES,
+  INITIAL_FOOD,
+  INITIAL_AGE,
+  ADULT_AGE,
+  WORKER_MAX_AGE,
+  FERTILITY_MIN_AGE,
+  FERTILITY_MAX_AGE,
+  FERTILITY_RATE,
+  MARRIAGE_RATE,
+  FOOD_PER_WORKER,
+  STARVATION_DIVISOR,
+} from "./constants";
 
 const maleNames = [
   "Adam", "Noah", "Liam", "Oliver", "James", "William", "Benjamin", "Lucas", "Henry", "Alexander",
@@ -20,12 +44,6 @@ const femaleNames = [
   "Freya", "Ingrid", "Astrid", "Sigrid", "Helga", "Gudrun", "Thyra", "Ragnhild", "Solveig", "Eira",
 ];
 
-// Gompertz mortality model parameters
-// μ(age) = a * exp(b * (age - c))
-// Tuned for ~60 year average lifespan in pre-modern conditions
-const GOMPERTZ_A = 0.003;  // baseline mortality rate
-const GOMPERTZ_B = 0.08;   // mortality acceleration
-const GOMPERTZ_C = 15;     // age offset
 
 function getRandomName(gender: Gender, usedNames: Set<string>): string {
   const names = gender === "male" ? maleNames : femaleNames;
@@ -45,19 +63,20 @@ function getRandomName(gender: Gender, usedNames: Set<string>): string {
 
 function deathProbability(age: number): number {
   // Infant/child mortality (higher in pre-modern era)
-  if (age < 5) return 0.05;   // 5% per year for infants
-  if (age < 15) return 0.01;  // 1% per year for children
+  if (age < 5) return INFANT_MORTALITY_RATE;
+  if (age < ADULT_AGE) return CHILD_MORTALITY_RATE;
 
   // Gompertz model for adults: exponentially increasing mortality
   const prob = GOMPERTZ_A * Math.exp(GOMPERTZ_B * (age - GOMPERTZ_C));
-  return Math.min(0.95, prob);
+  return Math.min(MAX_DEATH_PROBABILITY, prob);
 }
 
 function createInitialHumans(): Human[] {
   const humans: Human[] = [];
   const usedNames = new Set<string>();
+  const birthYear = INITIAL_YEAR - INITIAL_AGE;
 
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < INITIAL_COUPLES; i++) {
     const femaleId = i * 2 + 1;
     const maleId = i * 2 + 2;
 
@@ -65,8 +84,8 @@ function createInitialHumans(): Human[] {
       id: femaleId,
       name: getRandomName("female", usedNames),
       gender: "female",
-      age: 15,
-      birthYear: -8014,
+      age: INITIAL_AGE,
+      birthYear,
       isAlive: true,
       spouseId: maleId,
     });
@@ -75,8 +94,8 @@ function createInitialHumans(): Human[] {
       id: maleId,
       name: getRandomName("male", usedNames),
       gender: "male",
-      age: 15,
-      birthYear: -8014,
+      age: INITIAL_AGE,
+      birthYear,
       isAlive: true,
       spouseId: femaleId,
     });
@@ -86,42 +105,192 @@ function createInitialHumans(): Human[] {
 }
 
 function createDefaultState(): GameState {
+  const initialPopulation = INITIAL_COUPLES * 2;
   return {
     humans: createInitialHumans(),
-    food: 2000,
-    year: -8000,
-    nextId: 201,
-    logs: ["8000 BC: Simulation started with 100 couples"],
-    history: [{ year: -8000, population: 200, births: 0, food: 2000 }],
+    food: INITIAL_FOOD,
+    year: INITIAL_YEAR,
+    nextId: initialPopulation + 1,
+    logs: [`${formatYear(INITIAL_YEAR)}: Simulation started with ${INITIAL_COUPLES} couples`],
+    history: [{ year: INITIAL_YEAR, population: initialPopulation, births: 0, food: INITIAL_FOOD }],
   };
 }
 
+/**
+ * Validate a Human object structure
+ */
+function isValidHuman(obj: unknown): obj is Human {
+  if (!obj || typeof obj !== "object") return false;
+  const h = obj as Record<string, unknown>;
+  return (
+    typeof h.id === "number" &&
+    typeof h.name === "string" &&
+    (h.gender === "male" || h.gender === "female") &&
+    typeof h.age === "number" &&
+    h.age >= 0 &&
+    typeof h.isAlive === "boolean" &&
+    (h.birthYear === undefined || typeof h.birthYear === "number") &&
+    (h.deathYear === undefined || typeof h.deathYear === "number") &&
+    (h.motherId === undefined || typeof h.motherId === "number") &&
+    (h.fatherId === undefined || typeof h.fatherId === "number") &&
+    (h.spouseId === undefined || typeof h.spouseId === "number")
+  );
+}
+
+/**
+ * Validate a HistoryPoint object structure
+ */
+function isValidHistoryPoint(obj: unknown): obj is HistoryPoint {
+  if (!obj || typeof obj !== "object") return false;
+  const h = obj as Record<string, unknown>;
+  return (
+    typeof h.year === "number" &&
+    typeof h.population === "number" &&
+    typeof h.births === "number" &&
+    typeof h.food === "number"
+  );
+}
+
+/**
+ * Validate entire GameState structure
+ */
+function isValidGameState(obj: unknown): obj is GameState {
+  if (!obj || typeof obj !== "object") return false;
+  const state = obj as Record<string, unknown>;
+
+  // Check required fields
+  if (
+    typeof state.food !== "number" ||
+    typeof state.year !== "number" ||
+    typeof state.nextId !== "number" ||
+    !Array.isArray(state.humans) ||
+    !Array.isArray(state.logs) ||
+    !Array.isArray(state.history)
+  ) {
+    return false;
+  }
+
+  // Validate all humans (sample check for large arrays)
+  const humansToCheck = state.humans.length > 100
+    ? state.humans.slice(0, 50).concat(state.humans.slice(-50))
+    : state.humans;
+  if (!humansToCheck.every(isValidHuman)) {
+    return false;
+  }
+
+  // Validate logs are strings
+  if (!state.logs.every((log: unknown) => typeof log === "string")) {
+    return false;
+  }
+
+  // Validate history points (sample check)
+  const historyToCheck = state.history.length > 100
+    ? state.history.slice(0, 50).concat(state.history.slice(-50))
+    : state.history;
+  if (!historyToCheck.every(isValidHistoryPoint)) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Check if localStorage is available
+ */
+function isLocalStorageAvailable(): boolean {
+  try {
+    const testKey = "__storage_test__";
+    localStorage.setItem(testKey, testKey);
+    localStorage.removeItem(testKey);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Track storage availability
+let storageAvailable = isLocalStorageAvailable();
+let storageWarningShown = false;
+
+/**
+ * Load game state from localStorage with validation
+ */
 function loadFromStorage(): GameState | null {
+  if (!storageAvailable) {
+    if (!storageWarningShown) {
+      console.warn("localStorage is not available. Progress will not be saved.");
+      storageWarningShown = true;
+    }
+    return null;
+  }
+
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved) as GameState;
-      // Validate basic structure
-      if (parsed.humans && parsed.year && parsed.food !== undefined) {
+    if (!saved) return null;
+
+    const parsed = JSON.parse(saved);
+
+    // Handle versioned save format
+    if (parsed && typeof parsed === "object" && "version" in parsed) {
+      const saveData = parsed as SaveData;
+
+      // Check version compatibility
+      if (saveData.version > SAVE_VERSION) {
+        console.warn(`Save version ${saveData.version} is newer than supported ${SAVE_VERSION}`);
+        return null;
+      }
+
+      // Validate state structure
+      if (isValidGameState(saveData.state)) {
+        return saveData.state;
+      }
+    } else {
+      // Legacy save format (no version)
+      if (isValidGameState(parsed)) {
         return parsed;
       }
     }
+
+    console.warn("Save data validation failed, starting fresh");
+    return null;
   } catch (e) {
     console.error("Failed to load save:", e);
+    return null;
   }
-  return null;
 }
 
+/**
+ * Save game state to localStorage with version info
+ */
 function saveToStorage(state: GameState): void {
+  if (!storageAvailable) return;
+
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const saveData: SaveData = {
+      version: SAVE_VERSION,
+      state,
+      savedAt: Date.now(),
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(saveData));
   } catch (e) {
-    console.error("Failed to save:", e);
+    // Handle quota exceeded or other storage errors
+    if (e instanceof DOMException && e.name === "QuotaExceededError") {
+      console.error("Storage quota exceeded. Unable to save progress.");
+    } else {
+      console.error("Failed to save:", e);
+    }
+    // Disable further save attempts on persistent errors
+    storageAvailable = false;
   }
 }
 
 function clearStorage(): void {
-  localStorage.removeItem(STORAGE_KEY);
+  if (!storageAvailable) return;
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Ignore errors when clearing
+  }
 }
 
 export function createGameStore() {
@@ -134,17 +303,11 @@ export function createGameStore() {
 
   let intervalId: number | undefined;
   let tickCount = 0;
-  const SAVE_INTERVAL = 10; // Save every 10 ticks instead of every tick
   const usedNames = new Set<string>(state.humans.map(h => h.name));
-
-  function formatYear(year: number): string {
-    if (year <= 0) return `${Math.abs(year)} BC`;
-    return `${year} AD`;
-  }
 
   function addLog(message: string) {
     setState("logs", (logs) =>
-      [`${formatYear(state.year)}: ${message}`, ...logs].slice(0, 50)
+      [`${formatYear(state.year)}: ${message}`, ...logs].slice(0, MAX_LOG_ENTRIES)
     );
   }
 
@@ -179,13 +342,13 @@ export function createGameStore() {
     for (const human of state.humans) {
       humanById.set(human.id, human);
 
-      // Workers (15-49)
-      if (human.age >= 15 && human.age < 50) {
+      // Workers
+      if (human.age >= ADULT_AGE && human.age <= WORKER_MAX_AGE) {
         workerCount++;
       }
 
       // Unmarried adults for marriage
-      if (human.age >= 15 && !human.spouseId) {
+      if (human.age >= ADULT_AGE && !human.spouseId) {
         if (human.gender === "female") {
           unmarriedWomen.push(human);
         } else {
@@ -193,11 +356,11 @@ export function createGameStore() {
         }
       }
 
-      // Fertile married women (15-30)
+      // Fertile married women
       if (
         human.gender === "female" &&
-        human.age >= 15 &&
-        human.age <= 30 &&
+        human.age >= FERTILITY_MIN_AGE &&
+        human.age <= FERTILITY_MAX_AGE &&
         human.spouseId !== undefined
       ) {
         fertileMarriedWomen.push(human);
@@ -212,7 +375,7 @@ export function createGameStore() {
 
     // 1. Food production
     if (workerCount > 0) {
-      setState("food", (f) => f + workerCount * 10);
+      setState("food", (f) => f + workerCount * FOOD_PER_WORKER);
     }
 
     // 2. Marriage (optimized with Set for O(1) lookup)
@@ -226,7 +389,7 @@ export function createGameStore() {
     }
 
     for (const woman of unmarriedWomen) {
-      if (Math.random() >= 0.5) continue;
+      if (Math.random() >= MARRIAGE_RATE) continue;
 
       for (const man of unmarriedMen) {
         if (takenGroomIds.has(man.id)) continue;
@@ -245,7 +408,7 @@ export function createGameStore() {
       const husband = humanById.get(woman.spouseId!);
       if (!husband || !husband.isAlive || deceasedIds.has(husband.id)) continue;
 
-      if (Math.random() < 0.3) {
+      if (Math.random() < FERTILITY_RATE) {
         const gender: Gender = Math.random() > 0.5 ? "male" : "female";
         const newHuman: Human = {
           id: state.nextId + newHumans.length,
@@ -308,7 +471,7 @@ export function createGameStore() {
     if (state.food < 0) {
       const starved = Math.min(
         state.humans.length,
-        Math.ceil(Math.abs(state.food) / 5)
+        Math.ceil(Math.abs(state.food) / STARVATION_DIVISOR)
       );
       if (starved > 0) {
         addLog(`Starved: ${starved} people`);
@@ -325,7 +488,7 @@ export function createGameStore() {
       food: state.food,
     };
     setState("history", (h) => {
-      if (h.length >= 1000) {
+      if (h.length >= MAX_HISTORY_POINTS) {
         // Shift first element and push new one (no spread)
         const newHistory = h.slice(1);
         newHistory.push(historyPoint);

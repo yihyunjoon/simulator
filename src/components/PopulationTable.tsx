@@ -9,13 +9,13 @@ import {
 import { createVirtualizer } from '@tanstack/solid-virtual'
 import { createSignal, For, Show } from 'solid-js'
 import type { Human } from '../types'
+import { formatYear } from '../utils'
+import { TABLE_ROW_HEIGHT } from '../constants'
 
 interface Props {
   humans: Human[]
   currentYear: number
 }
-
-const ROW_HEIGHT = 36
 
 export default function PopulationTable(props: Props) {
   let scrollContainerRef: HTMLDivElement | undefined
@@ -49,7 +49,7 @@ export default function PopulationTable(props: Props) {
       cell: info => {
         const year = info.getValue() as number | undefined
         if (year === undefined) return '-'
-        return year <= 0 ? `${Math.abs(year)} BC` : `${year} AD`
+        return formatYear(year)
       },
     },
     {
@@ -80,15 +80,19 @@ export default function PopulationTable(props: Props) {
       return table.getRowModel().rows.length
     },
     getScrollElement: () => scrollContainerRef ?? null,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => TABLE_ROW_HEIGHT,
     overscan: 10,
   })
 
   return (
-    <div class="bg-stone-900/80 border border-amber-900/50 rounded-lg overflow-hidden">
+    <section
+      class="bg-stone-900/80 border border-amber-900/50 rounded-lg overflow-hidden"
+      role="region"
+      aria-labelledby="registry-heading"
+    >
       <div class="px-4 py-3 border-b border-amber-900/30">
-        <h3 class="text-amber-200 font-serif text-lg">Population Registry</h3>
-        <p class="text-amber-600/70 text-xs mt-1">
+        <h3 id="registry-heading" class="text-amber-200 font-serif text-lg">Population Registry</h3>
+        <p class="text-amber-600/70 text-xs mt-1" aria-live="polite">
           {props.humans.length} citizens recorded
         </p>
       </div>
@@ -96,8 +100,10 @@ export default function PopulationTable(props: Props) {
         ref={scrollContainerRef}
         class="overflow-auto"
         style={{ height: '320px' }}
+        tabindex="0"
+        aria-label="Population data table, scroll to view more"
       >
-        <table class="w-full text-sm" style={{ 'table-layout': 'fixed' }}>
+        <table class="w-full text-sm" style={{ 'table-layout': 'fixed' }} aria-describedby="registry-heading">
           <thead class="sticky top-0 bg-stone-800/95 z-10">
             <For each={table.getHeaderGroups()}>
               {headerGroup => (
@@ -105,11 +111,22 @@ export default function PopulationTable(props: Props) {
                   <For each={headerGroup.headers}>
                     {header => (
                       <th
-                        class="px-3 py-2 text-left text-amber-400/80 font-medium border-b border-amber-900/30 cursor-pointer select-none hover:bg-amber-900/20"
+                        class="px-3 py-2 text-left text-amber-400/80 font-medium border-b border-amber-900/30 cursor-pointer select-none hover:bg-amber-900/20 focus:outline-none focus:ring-2 focus:ring-amber-400"
                         classList={{
                           'cursor-pointer': header.column.getCanSort(),
                         }}
                         onClick={header.column.getToggleSortingHandler()}
+                        tabindex={header.column.getCanSort() ? 0 : undefined}
+                        aria-sort={
+                          header.column.getIsSorted() === 'asc' ? 'ascending' :
+                          header.column.getIsSorted() === 'desc' ? 'descending' : undefined
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            header.column.getToggleSortingHandler()?.(e)
+                          }
+                        }}
                       >
                         <div class="flex items-center gap-1">
                           <Show when={!header.isPlaceholder}>
@@ -119,10 +136,10 @@ export default function PopulationTable(props: Props) {
                             )}
                           </Show>
                           <Show when={header.column.getIsSorted() === 'asc'}>
-                            <span class="text-amber-500">▲</span>
+                            <span class="text-amber-500" aria-hidden="true">▲</span>
                           </Show>
                           <Show when={header.column.getIsSorted() === 'desc'}>
-                            <span class="text-amber-500">▼</span>
+                            <span class="text-amber-500" aria-hidden="true">▼</span>
                           </Show>
                         </div>
                       </th>
@@ -146,7 +163,7 @@ export default function PopulationTable(props: Props) {
                 return (
                   <tr
                     class="border-b border-amber-900/20 hover:bg-amber-900/10"
-                    style={{ height: `${ROW_HEIGHT}px` }}
+                    style={{ height: `${TABLE_ROW_HEIGHT}px` }}
                   >
                     <For each={row.getVisibleCells()}>
                       {cell => (
@@ -175,6 +192,6 @@ export default function PopulationTable(props: Props) {
           </tbody>
         </table>
       </div>
-    </div>
+    </section>
   )
 }

@@ -1,6 +1,8 @@
 import { createEffect, For, onMount, onCleanup } from 'solid-js'
 import * as d3 from 'd3'
 import type { HistoryPoint } from '../types'
+import { formatYear } from '../utils'
+import { CHART_HEIGHT, CHART_MARGIN, CHART_THROTTLE_MS } from '../constants'
 
 interface ChartsProps {
   history: HistoryPoint[]
@@ -12,19 +14,10 @@ interface ChartConfig {
   getValue: (point: HistoryPoint) => number
 }
 
-const CHART_HEIGHT = 120
-const MARGIN = { top: 20, right: 20, bottom: 30, left: 50 }
-
-function formatYear(year: number): string {
-  if (year <= 0) return `${Math.abs(year)} BC`
-  return `${year} AD`
-}
-
 function Chart(props: { config: ChartConfig; history: HistoryPoint[] }) {
   let svgRef: SVGSVGElement | undefined
   let rafId: number | undefined
   let lastDrawTime = 0
-  const THROTTLE_MS = 100 // Only redraw every 100ms
 
   const drawChart = () => {
     if (!svgRef || props.history.length < 2) return
@@ -33,14 +26,14 @@ function Chart(props: { config: ChartConfig; history: HistoryPoint[] }) {
     svg.selectAll('*').remove()
 
     const width = svgRef.clientWidth || 300
-    const innerWidth = width - MARGIN.left - MARGIN.right
-    const innerHeight = CHART_HEIGHT - MARGIN.top - MARGIN.bottom
+    const innerWidth = width - CHART_MARGIN.left - CHART_MARGIN.right
+    const innerHeight = CHART_HEIGHT - CHART_MARGIN.top - CHART_MARGIN.bottom
 
     const g = svg
       .attr('width', width)
       .attr('height', CHART_HEIGHT)
       .append('g')
-      .attr('transform', `translate(${MARGIN.left},${MARGIN.top})`)
+      .attr('transform', `translate(${CHART_MARGIN.left},${CHART_MARGIN.top})`)
 
     const data = props.history
     const getValue = props.config.getValue
@@ -127,7 +120,7 @@ function Chart(props: { config: ChartConfig; history: HistoryPoint[] }) {
 
   const throttledDraw = () => {
     const now = performance.now()
-    if (now - lastDrawTime < THROTTLE_MS) {
+    if (now - lastDrawTime < CHART_THROTTLE_MS) {
       // Schedule for later if not enough time has passed
       if (rafId) cancelAnimationFrame(rafId)
       rafId = requestAnimationFrame(() => {
@@ -160,15 +153,20 @@ function Chart(props: { config: ChartConfig; history: HistoryPoint[] }) {
   }
 
   return (
-    <div class="bg-amber-50 border border-amber-300 p-2">
-      <div class="text-xs font-serif text-amber-800 mb-1 text-center">
+    <figure class="bg-amber-50 border border-amber-300 p-2" role="img" aria-label={`${props.config.title} chart showing current value: ${currentValue().toLocaleString()}`}>
+      <figcaption class="text-xs font-serif text-amber-800 mb-1 text-center">
         {props.config.title}
-      </div>
-      <svg ref={svgRef} class="w-full" style={{ height: `${CHART_HEIGHT}px` }} />
-      <div class="text-center text-sm font-serif font-bold" style={{ color: props.config.color }}>
+      </figcaption>
+      <svg
+        ref={svgRef}
+        class="w-full"
+        style={{ height: `${CHART_HEIGHT}px` }}
+        aria-hidden="true"
+      />
+      <div class="text-center text-sm font-serif font-bold" style={{ color: props.config.color }} aria-hidden="true">
         {currentValue().toLocaleString()}
       </div>
-    </div>
+    </figure>
   )
 }
 
@@ -180,9 +178,9 @@ export default function Charts(props: ChartsProps) {
   ]
 
   return (
-    <div class="bg-linear-to-b from-amber-100 to-amber-50 border-4 border-amber-900/40 overflow-hidden">
+    <section class="bg-linear-to-b from-amber-100 to-amber-50 border-4 border-amber-900/40 overflow-hidden" role="region" aria-labelledby="charts-heading">
       <div class="bg-linear-to-r from-amber-900 to-amber-800 px-4 py-2 border-b-2 border-amber-950">
-        <h2 class="text-amber-100 font-serif tracking-widest text-sm uppercase">
+        <h2 id="charts-heading" class="text-amber-100 font-serif tracking-widest text-sm uppercase">
           Statistics
         </h2>
       </div>
@@ -192,6 +190,6 @@ export default function Charts(props: ChartsProps) {
           {(chart) => <Chart config={chart} history={props.history} />}
         </For>
       </div>
-    </div>
+    </section>
   )
 }

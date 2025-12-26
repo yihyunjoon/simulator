@@ -28,3 +28,10 @@ export interface GameState {
   logs: string[]
   history: HistoryPoint[]
 }
+
+/** Saved game data with version info for compatibility */
+export interface SaveData {
+  version: number
+  state: GameState
+  savedAt: number
+}
