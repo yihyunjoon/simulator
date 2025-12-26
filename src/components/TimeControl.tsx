@@ -1,5 +1,6 @@
 import { For, onMount, onCleanup } from "solid-js";
 import type { Accessor } from "solid-js";
+import { SPEED_OPTIONS } from "../constants";
 
 interface TimeControlProps {
   isRunning: Accessor<boolean>;
@@ -8,13 +9,6 @@ interface TimeControlProps {
   changeSpeed: (speed: number) => void;
   reset: () => void;
 }
-
-const SPEEDS = [
-  { value: 1, key: "1" },
-  { value: 2, key: "2" },
-  { value: 5, key: "3" },
-  { value: 10, key: "4" },
-];
 
 export default function TimeControl(props: TimeControlProps) {
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -26,7 +20,7 @@ export default function TimeControl(props: TimeControlProps) {
       return;
     }
 
-    const speedEntry = SPEEDS.find((s) => s.key === e.key);
+    const speedEntry = SPEED_OPTIONS.find((s) => s.key === e.key);
     if (speedEntry) {
       props.changeSpeed(speedEntry.value);
     } else if (e.key === " ") {
@@ -71,7 +65,7 @@ export default function TimeControl(props: TimeControlProps) {
           <div class="space-y-1">
             <div class="text-stone-400 text-xs font-serif px-1">Tempo</div>
             <div class="grid grid-cols-4 gap-1">
-              <For each={SPEEDS}>
+              <For each={SPEED_OPTIONS}>
                 {(s) => (
                   <button
                     onClick={() => props.changeSpeed(s.value)}

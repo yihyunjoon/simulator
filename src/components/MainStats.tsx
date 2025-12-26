@@ -1,4 +1,6 @@
 import { createMemo } from 'solid-js'
+import { formatYear } from '../utils'
+import { FOOD_STATUS_ABUNDANT, FOOD_STATUS_SUFFICIENT, FOOD_STATUS_SCARCE } from '../constants'
 
 interface MainStatsProps {
   year: number
@@ -8,16 +10,11 @@ interface MainStatsProps {
 }
 
 export default function MainStats(props: MainStatsProps) {
-  const formatYear = (year: number) => {
-    if (year <= 0) return `${Math.abs(year)} BC`
-    return `${year} AD`
-  }
-
   const foodStatus = createMemo(() => {
     const perPerson = props.population > 0 ? props.food / props.population : 0
-    if (perPerson >= 20) return { label: 'Abundant', color: 'text-emerald-700' }
-    if (perPerson >= 10) return { label: 'Sufficient', color: 'text-amber-700' }
-    if (perPerson >= 5) return { label: 'Scarce', color: 'text-orange-700' }
+    if (perPerson >= FOOD_STATUS_ABUNDANT) return { label: 'Abundant', color: 'text-emerald-700' }
+    if (perPerson >= FOOD_STATUS_SUFFICIENT) return { label: 'Sufficient', color: 'text-amber-700' }
+    if (perPerson >= FOOD_STATUS_SCARCE) return { label: 'Scarce', color: 'text-orange-700' }
     return { label: 'Famine', color: 'text-red-800' }
   })
 

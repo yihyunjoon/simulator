@@ -9,13 +9,13 @@ import {
 import { createVirtualizer } from '@tanstack/solid-virtual'
 import { createSignal, For, Show } from 'solid-js'
 import type { Human } from '../types'
+import { formatYear } from '../utils'
+import { TABLE_ROW_HEIGHT } from '../constants'
 
 interface Props {
   humans: Human[]
   currentYear: number
 }
-
-const ROW_HEIGHT = 36
 
 export default function PopulationTable(props: Props) {
   let scrollContainerRef: HTMLDivElement | undefined
@@ -49,7 +49,7 @@ export default function PopulationTable(props: Props) {
       cell: info => {
         const year = info.getValue() as number | undefined
         if (year === undefined) return '-'
-        return year <= 0 ? `${Math.abs(year)} BC` : `${year} AD`
+        return formatYear(year)
       },
     },
     {
@@ -80,7 +80,7 @@ export default function PopulationTable(props: Props) {
       return table.getRowModel().rows.length
     },
     getScrollElement: () => scrollContainerRef ?? null,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => TABLE_ROW_HEIGHT,
     overscan: 10,
   })
 
@@ -146,7 +146,7 @@ export default function PopulationTable(props: Props) {
                 return (
                   <tr
                     class="border-b border-amber-900/20 hover:bg-amber-900/10"
-                    style={{ height: `${ROW_HEIGHT}px` }}
+                    style={{ height: `${TABLE_ROW_HEIGHT}px` }}
                   >
                     <For each={row.getVisibleCells()}>
                       {cell => (
